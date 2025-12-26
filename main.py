@@ -1,9 +1,11 @@
 import os
 import json
 import torch
+import asyncio
 from src.preprocessor import OpinionPreprocessor
 from src.topic_modeler import TopicAnalyzer
 from src.media_crawler_client import crawl_once
+from pathlib import Path
 
 async def fetech_data(platform,login_type,keywords):
     result = await crawl_once(
@@ -22,7 +24,7 @@ def main():
 
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
-    raw_data,_=fetech_data(platform='dy',login_type='cookie',keywords="小米17Ultra")
+    _,raw_data=asyncio.run(fetech_data(platform='dy',login_type='cookie',keywords="小米su7"))
     print(f"数据收集完成，有效数据: {len(raw_data)} 条")
 
     # 2. 数据预处理
@@ -73,7 +75,8 @@ def main():
     # 5. 保存结果与可视化
     print("-" * 30)
     print("Step 3: 生成结果与可视化")
-    analyzer.save_visualizations(output_dir="data/results")
+    THIS_DIR=Path(__file__).resolve().parent
+    analyzer.save_visualizations(output_dir=THIS_DIR+"/data/results")
 
     # 6. 获取结构化数据
     structured_topics = analyzer.get_topic_details(token_to_raw_map=token_to_raw_mapping)
@@ -95,7 +98,7 @@ def main():
         # === 修改结束 ===
 
     # 保存 JSON
-    with open("data/results/topics_output.json", "w", encoding='utf-8') as f:
+    with open(THIS_DIR+"/data/results/topics_output.json", "w", encoding='utf-8') as f:
         json.dump(structured_topics, f, ensure_ascii=False, indent=2)
     print("\n结果已保存至 data/results/topics_output.json")
 
