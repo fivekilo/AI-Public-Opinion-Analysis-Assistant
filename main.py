@@ -25,7 +25,7 @@ def main():
 
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
-    _,raw_data=asyncio.run(fetech_data(platform='bili',login_type='cookie',keywords="小米su7"))
+    _,raw_data=asyncio.run(fetech_data(platform='wb',login_type='cookie',keywords="美国斩杀线"))
     print(f"数据收集完成，有效数据: {len(raw_data)} 条")
 
     # 2. 数据预处理

@@ -91,6 +91,10 @@ async def crawl_once(
     config.LOGIN_TYPE = login_type
     config.CRAWLER_TYPE = "search"
     config.KEYWORDS = keywords
+    # 爬取视频/帖子的数量控制
+    config.CRAWLER_MAX_NOTES_COUNT = 50
+    # 爬取一级评论的数量控制(单视频/帖子)
+    config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 30
 
     # 不使用 DB/Excel，避免多余开销；具体值无所谓，后面会用内存存储接管
     config.SAVE_DATA_OPTION = "json"

@@ -143,6 +143,24 @@ class WeiboClient(ProxyRefreshMixin):
             cookies = await browser_context.cookies()
             utils.logger.info("[WeiboClient.update_cookies] Updating all cookies")
 
+        # === 新增代码开始：强制瘦身 ===
+        # 微博 API 只需要 SUB, SUBP, _T_WM 等核心字段
+        # 过滤掉其他的几十个垃圾广告Cookie，防止 400 Header Too Large
+        valid_keys = ["SUB", "SUBP", "_T_WM", "XSRF-TOKEN", "PC_TOKEN"]
+
+        filtered_cookies = []
+        for cookie in cookies:
+            if cookie["name"] in valid_keys:
+                filtered_cookies.append(cookie)
+
+        if len(filtered_cookies) > 0:
+            utils.logger.info(f"[WeiboClient.update_cookies] Cookie瘦身: 从 {len(cookies)} 个精简为 {len(filtered_cookies)} 个")
+            cookies = filtered_cookies
+        else:
+            # 如果没找到核心cookie，可能是没登录成功，保留全部以防万一，或者抛错
+            utils.logger.warning("[WeiboClient.update_cookies] 未检测到微博核心Cookie(SUB)，可能登录未完成")
+        # === 新增代码结束 ===
+
         cookie_str, cookie_dict = utils.convert_cookies(cookies)
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
