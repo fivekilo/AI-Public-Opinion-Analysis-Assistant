@@ -140,7 +140,7 @@ if __name__ == "__main__":
         result = await crawl_once(
             platform="wb",
             login_type="cookie",
-            keywords="小米 17Ultra",
+            keywords="高市早苗台湾",
         )
         print("contents:", len(result["contents"]))
         print("comments:", len(result["comments"]))
