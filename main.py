@@ -3,34 +3,29 @@ import json
 import torch
 from src.preprocessor import OpinionPreprocessor
 from src.topic_modeler import TopicAnalyzer
+from src.media_crawler_client import crawl_once
+
+async def fetech_data(platform,login_type,keywords):
+    result = await crawl_once(
+        platform=platform,          # xhs / dy / ks / bili / wb / tieba / zhihu
+        login_type=login_type,     # qrcode / phone / cookie
+        keywords=keywords,
+    )
+    contents = result["contents"]
+    comments = result["comments"]
+    # 在这里直接把 contents/comments 丢给你的后续预处理逻辑即可
+    return contents, comments
 
 def main():
-    # 1. 准备数据路径
+    # 1. 爬取数据
     # 请确保 data/raw 目录下有你的 json 文件
 
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
-    raw_file_path = "data/raw/search_comments_2025-12-25.json"
-
-    if not os.path.exists(raw_file_path):
-        print(f"错误：找不到数据文件 {raw_file_path}")
-        # 为了演示，创建一个假数据
-        print("正在生成模拟数据以供测试...")
-        mock_data = [
-                        {"content": "黑神话悟空优化太差了，4060都掉帧", "create_time": 1764163704},
-                        {"content": "剧情确实有点魔改，但是美术无敌", "create_time": 1764163705},
-                        {"content": "退钱！这根本玩不了", "create_time": 1764163706},
-                        {"content": "年度最佳游戏，实至名归", "create_time": 1764163707},
-                        {"content": "我显卡炸了，什么破优化", "create_time": 1764163708}
-                    ] * 20  # 复制多一点以满足 HDBSCAN 最小聚类要求
-        raw_data = mock_data
-    else:
-        with open(raw_file_path, 'r', encoding='utf-8') as f:
-            raw_data = json.load(f)
+    raw_data,_=fetech_data(platform='dy',login_type='cookie',keywords="小米17Ultra")
+    print(f"数据收集完成，有效数据: {len(raw_data)} 条")
 
     # 2. 数据预处理
-    print("-" * 30)
-    print("Step 1: 数据清洗与分词")
     preprocessor = OpinionPreprocessor()
     # process 返回的是 list of dict
     processed_data = preprocessor.process(raw_data)
