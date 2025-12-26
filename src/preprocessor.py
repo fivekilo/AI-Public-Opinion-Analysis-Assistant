@@ -4,7 +4,7 @@ import datetime
 import time
 from simhash import Simhash
 import hanlp
-import config
+from src import config
 import json
 
 class OpinionPreprocessor:
@@ -61,10 +61,16 @@ class OpinionPreprocessor:
 
     def _clean_text(self, text):
         """
-        (2) 文本清洗：去除@用户，表情包映射
+        (2) 文本清洗：去除@用户，去除 URL 链接，表情包映射
         """
         if not text:
             return ""
+
+        # === 新增：去除 URL 链接 ===
+        # 匹配 http/https 开头的链接
+        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+        # 匹配 b23.tv 这种短链
+        text = re.sub(r'[a-zA-Z0-9]+\.(tv|com|cn)/[a-zA-Z0-9]+', '', text)
             
         # 去除 @用户 (例如: @绵绵无绝期 )
         # 匹配逻辑：@开头，后面跟非空白字符
@@ -176,7 +182,7 @@ class OpinionPreprocessor:
 # --- 测试代码 ---
 if __name__ == "__main__":
     # 模拟你图片中的原始数据
-    with open("data\小米17Ultra\\bili\search_comments_2025-12-25.json",'r',encoding='utf-8') as f:
+    with open("D:/Github/AI-Public-Opinion-Analysis-Assistant/data/raw/search_comments_2025-12-25.json",'r',encoding='utf-8') as f:
         raw_data = json.load(f)
 
     processor = OpinionPreprocessor()
