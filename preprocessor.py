@@ -176,7 +176,7 @@ class OpinionPreprocessor:
 # --- 测试代码 ---
 if __name__ == "__main__":
     # 模拟你图片中的原始数据
-    with open("data/search_comments_2025-11-26.json",'r',encoding='utf-8') as f:
+    with open("data\小米17Ultra\\bili\search_comments_2025-12-25.json",'r',encoding='utf-8') as f:
         raw_data = json.load(f)
 
     processor = OpinionPreprocessor()
