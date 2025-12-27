@@ -40,7 +40,7 @@ class DatabaseManager:
             print(f"[DB] 存储原始数据报错: {e}")
             return 0
 
-    def save_analysis_result(self, topic_data, batch_id=None):
+    def save_analysis_result(self, topic_data, batch_id=None,keyword=None): # 新增 keyword 参数
         """
         保存 BERTopic 的分析结果
         """
@@ -50,6 +50,7 @@ class DatabaseManager:
         document = {
             "batch_id": batch_id,
             "created_at": datetime.datetime.now(),
+            "keyword": keyword,  # <--- 记录详细主题
             "topics": topic_data  # 这里直接存 list[dict]
         }
 
