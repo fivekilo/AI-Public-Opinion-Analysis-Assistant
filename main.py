@@ -6,6 +6,7 @@ from src.preprocessor import OpinionPreprocessor
 from src.topic_modeler import TopicAnalyzer
 from src.media_crawler_client import crawl_once
 from pathlib import Path
+from src.database import db
 
 THIS_DIR=Path(__file__).resolve().parent
 
@@ -82,7 +83,7 @@ def main():
     # 5. 保存结果与可视化
     print("-" * 30)
     print("Step 3: 生成结果与可视化")
-    
+
     analyzer.save_visualizations(output_dir=THIS_DIR/"data/results")
 
     # 6. 获取结构化数据
@@ -108,6 +109,21 @@ def main():
     with open(THIS_DIR/"data/results/topics_output.json", "w", encoding='utf-8') as f:
         json.dump(structured_topics, f, ensure_ascii=False, indent=2)
     print("\n结果已保存至 data/results/topics_output.json")
+
+    # 7. 结果保存数据库
+    print("\n[Phase 6] 生成结果...")
+
+    # A. 存原始数据 (可选：如果你想存清洗后的数据)
+    # processed_data 里面包含了 content, clean_content, tokens 等
+    # 我们可以把它们存进去，作为“数据资产”
+    db.save_raw_data(processed_comments)
+    # B. 存分析结果
+    structured_topics = analyzer.get_topic_details(token_to_raw_map=token_to_raw_mapping)
+
+    # 存入 MongoDB
+    batch_id = db.save_analysis_result(structured_topics)
+
+    print(f"\n✅ 全流程执行完毕！数据已入库，批次ID: {batch_id}")
 
 
 if __name__ == "__main__":
