@@ -10,24 +10,56 @@ from src.database import db
 
 THIS_DIR=Path(__file__).resolve().parent
 
-async def fetech_data(platform,login_type,keywords):
-    result = await crawl_once(
-        platform=platform,          # xhs / dy / ks / bili / wb / tieba / zhihu
-        login_type=login_type,     # qrcode / phone / cookie
-        keywords=keywords,
-    )
-    contents = result["contents"]
-    comments = result["comments"]
-    # 在这里直接把 contents/comments 丢给你的后续预处理逻辑即可
-    return contents, comments
+async def fetech_data(platform, login_type, keywords):
+    try:
+        print(f"开始爬取平台: {platform}")
+        result = await crawl_once(
+            platform=platform,
+            login_type=login_type,
+            keywords=keywords,
+        )
+        contents = result.get("contents", [])
+        comments = result.get("comments", [])
+        print(f"平台 {platform} 爬取完成，获取到 {len(contents)} 条内容")
+        return contents, comments
+    except Exception as e:
+        print(f"平台 {platform} 爬取失败: {e}")
+        return [], []  # 发生异常时返回空列表，确保程序不崩溃
+
+async def run_all_platforms(platforms, login_type, keywords):
+    # 1. 创建任务列表
+    tasks = []
+    for p in platforms:
+        tasks.append(fetech_data(p, login_type, keywords))
+    
+    # 2. 并发执行所有任务
+    # asyncio.gather 会同时运行所有 fetch_data，并等待它们全部返回
+    all_results = await asyncio.gather(*tasks)
+    
+    # 3. 合并结果
+    total_contents = []
+    total_comments = []
+    
+    for contents, comments in all_results:
+        total_contents.extend(contents) # 使用 extend 拼接列表
+        total_comments.extend(comments)
+        
+    return total_contents, total_comments
 
 def main():
     # 1. 爬取数据
     # 请确保 data/raw 目录下有你的 json 文件
 
-    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-    keywords="小米17Ultra"
-    contents,comments=asyncio.run(fetech_data(platform='tieba',login_type='qrcode',keywords=keywords))
+    keywords = "小米17Ultra"
+    login_type = "cookie"
+    
+    # 定义你想同时爬取的平台列表
+    target_platforms = ['xhs', 'dy', 'ks', 'bili', 'wb', 'tieba', 'zhihu']
+    
+    # 使用 asyncio.run 启动主异步函数
+    contents, comments = asyncio.run(
+        run_all_platforms(target_platforms, login_type, keywords)
+    )
     
     print(f"数据收集完成，有效数据: {len(contents)+len(comments)} 条")
 

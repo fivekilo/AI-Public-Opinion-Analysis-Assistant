@@ -4,7 +4,7 @@ import datetime
 import time
 from simhash import Simhash
 import hanlp
-from src import config
+import config
 import json
 
 class OpinionPreprocessor:
@@ -25,7 +25,8 @@ class OpinionPreprocessor:
             r"\[微笑\]": "<敷衍>",
             r"\[嗑瓜子\]": "<围观>",
             r"\[吃瓜\]": "<围观>",
-            r"\[流汗\]": "<无语>"
+            r"\[流汗\]": "<无语>",
+            r"\[星星眼\]":"<激动>"
         }
         
         # 3. 定义无意义垃圾文本集合
@@ -242,6 +243,8 @@ class OpinionPreprocessor:
         for seg in re.findall(r"[a-zA-Z0-9]+", kw):
             terms.add(seg)
 
+        self.stop_words.update(terms)
+
     def process(self, raw_data_list):
         """
         主处理管道
@@ -281,18 +284,7 @@ class OpinionPreprocessor:
 # --- 测试代码 ---
 if __name__ == "__main__":
     # 模拟你图片中的原始数据
-    with open("D:/Github/AI-Public-Opinion-Analysis-Assistant/data/raw/search_comments_2025-12-25.json",'r',encoding='utf-8') as f:
-        raw_data = json.load(f)
 
     processor = OpinionPreprocessor()
-    result = processor.process(raw_data)
-
-    # 打印结果展示
-    print("\n--- 处理结果 ---")
-    for res in result:
-        print(f"原内容: {res['content']}")
-        print(f"清洗后: {res['clean_content']}")
-        print(f"时间: {res['format_time']}")
-        print(f"相似聚合数: {res['similarity_count']}")
-        print(f"分词结果: {res['tokens']}")
-        print("-" * 50)
+    processor.update_domain_stopwords_from_keyword("小米17Ultra")
+    print('小米' in processor.stop_words)
