@@ -180,3 +180,5 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 /data/results
+data/表情包统计.json
+data/bqb_extract.py

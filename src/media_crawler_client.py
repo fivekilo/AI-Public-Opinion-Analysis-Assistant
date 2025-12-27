@@ -69,6 +69,8 @@ async def crawl_once(
     platform: Platform,
     login_type: LoginType,
     keywords: str,
+    CRAWLER_MAX_NOTES_COUNT=60,
+    CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES=30,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     调用 MediaCrawler 爬取一次，并把内容/评论/创作者信息作为变量返回。
@@ -91,6 +93,8 @@ async def crawl_once(
     config.LOGIN_TYPE = login_type
     config.CRAWLER_TYPE = "search"
     config.KEYWORDS = keywords
+    config.CRAWLER_MAX_NOTES_COUNT = CRAWLER_MAX_NOTES_COUNT
+    config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES
 
     # 不使用 DB/Excel，避免多余开销；具体值无所谓，后面会用内存存储接管
     config.SAVE_DATA_OPTION = "json"

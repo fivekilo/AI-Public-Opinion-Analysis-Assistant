@@ -9,15 +9,6 @@ class Config:
         self.stopwords_path = stopwords_path
         self.stopwords = self._load_stopwords()
 
-        # === 新增：领域停用词 (Domain Stopwords) ===
-        # 这些词虽然有意义，但在当前话题下是“背景噪音”，必须剔除才能分出流派
-        # 针对“小米17Ultra”这个话题：
-        self.domain_stopwords = {
-            "小米", "手机", "Ultra", "ultra", "17", "17u", "17U","17Ultra",# 相关的领域词汇
-            "视频", "点击", "链接", "同款", "https", "b23", "tv"  # 广告常用词
-        }
-        # 将领域停用词合并到主停用词表中
-        self.stopwords.update(self.domain_stopwords)
 
     def _load_stopwords(self):
         stopwords_set = set()

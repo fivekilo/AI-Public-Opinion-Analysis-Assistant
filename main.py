@@ -7,6 +7,8 @@ from src.topic_modeler import TopicAnalyzer
 from src.media_crawler_client import crawl_once
 from pathlib import Path
 
+THIS_DIR=Path(__file__).resolve().parent
+
 async def fetech_data(platform,login_type,keywords):
     result = await crawl_once(
         platform=platform,          # xhs / dy / ks / bili / wb / tieba / zhihu
@@ -23,16 +25,21 @@ def main():
     # 请确保 data/raw 目录下有你的 json 文件
 
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-
-    _,raw_data=asyncio.run(fetech_data(platform='dy',login_type='cookie',keywords="小米su7"))
-    print(f"数据收集完成，有效数据: {len(raw_data)} 条")
+    keywords="小米17Ultra"
+    contents,comments=asyncio.run(fetech_data(platform='tieba',login_type='qrcode',keywords=keywords))
+    
+    print(f"数据收集完成，有效数据: {len(contents)+len(comments)} 条")
 
     # 2. 数据预处理
     preprocessor = OpinionPreprocessor()
+    #根据关键词更新领域停用词
+    preprocessor.update_domain_stopwords_from_keyword(keyword=keywords)
     # process 返回的是 list of dict
-    processed_data = preprocessor.process(raw_data)
+    processed_comments = preprocessor.process(comments)
+    processed_contents = preprocessor.process(contents)
 
-    print(f"预处理完成，剩余有效数据: {len(processed_data)} 条")
+
+    print(f"预处理完成，剩余有效数据: {len(processed_comments)+len(processed_contents)} 条")
 
     # 3. 准备 BERTopic 需要的输入格式
     print("正在构建数据映射...")
@@ -42,7 +49,7 @@ def main():
     # Key: 分词后的字符串 (BERTopic理解的) -> Value: 原始字符串 (人类理解的)
     token_to_raw_mapping = {}
 
-    for item in processed_data:
+    for item in processed_comments:
         # 确保 tokens 存在
         if item.get('tokens'):
             # 1. 生成分词后的字符串 (给模型训练用)
@@ -75,8 +82,8 @@ def main():
     # 5. 保存结果与可视化
     print("-" * 30)
     print("Step 3: 生成结果与可视化")
-    THIS_DIR=Path(__file__).resolve().parent
-    analyzer.save_visualizations(output_dir=THIS_DIR+"/data/results")
+    
+    analyzer.save_visualizations(output_dir=THIS_DIR/"data/results")
 
     # 6. 获取结构化数据
     structured_topics = analyzer.get_topic_details(token_to_raw_map=token_to_raw_mapping)
@@ -98,7 +105,7 @@ def main():
         # === 修改结束 ===
 
     # 保存 JSON
-    with open(THIS_DIR+"/data/results/topics_output.json", "w", encoding='utf-8') as f:
+    with open(THIS_DIR/"data/results/topics_output.json", "w", encoding='utf-8') as f:
         json.dump(structured_topics, f, ensure_ascii=False, indent=2)
     print("\n结果已保存至 data/results/topics_output.json")
 

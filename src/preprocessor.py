@@ -9,7 +9,7 @@ import json
 
 class OpinionPreprocessor:
     def __init__(self):
-        # 1. 初始化 HanLP 分词模型 (使用轻量级模型以加快演示速度，生产环境可用大模型)
+        # 1. 初始化 HanLP 分词模型
         print("正在加载 HanLP 模型...")
         try:
             # 这里使用的是粗颗粒度分词，适合舆情分析
@@ -25,16 +25,46 @@ class OpinionPreprocessor:
             r"\[微笑\]": "<敷衍>",
             r"\[嗑瓜子\]": "<围观>",
             r"\[吃瓜\]": "<围观>",
-            r"\[流汗\]": "<无语>",
-            r"\[大哭\]": "<悲伤>"
+            r"\[流汗\]": "<无语>"
         }
         
         # 3. 定义无意义垃圾文本集合
         self.garbage_words = {"打卡", "哈哈", "哈哈哈", "沙发", "第一", "m", "dd", "转发"}
-        
+
+        # 3.1 抽奖 / 转发抽奖 相关垃圾关键词与模式
+        # 只要命中这些基本可以判定为活动/营销类转发评论
+        self.lottery_keywords = [
+            "转发抽奖",
+            "转发并@",
+            "转发本条",
+            "关注转发",
+            "转赞评",
+            "转评赞",
+            "抽奖",
+            "抽签",
+            "抽一个",
+            "抽几个",
+            "抽手机",
+            "送手机",
+            "送你一部",
+        ]
+        self.lottery_patterns = [
+            re.compile(r"转发.*(抽|送)"),
+            re.compile(r"(关注|收藏).*(转发|评论)"),
+            re.compile(r"(评论|留言).*(抽|送)"),
+        ]
+
+        # 3.2 URL 检测，用于过滤带外链的垃圾文本
+        # 这里同时覆盖 http/https 以及常见短链 / 域名形式
+        self.url_pattern = re.compile(
+            r"(https?://\S+|"
+            r"[a-zA-Z0-9_-]+\.(?:com|cn|net|org|io|tv|co|info)/\S*)"
+        )
+
         # 4. 加载停用词表 (模拟加载，实际使用请读取txt文件)
-        Config=config.Config()
-        self.stop_words =Config.stopwords_list
+        # 保留 Config 实例，便于后续动态更新领域停用词
+        self.config = config.Config()
+        self.stop_words = self.config.stopwords_list
 
     def _format_data(self, item):
         """
@@ -66,11 +96,8 @@ class OpinionPreprocessor:
         if not text:
             return ""
 
-        # === 新增：去除 URL 链接 ===
-        # 匹配 http/https 开头的链接
-        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
-        # 匹配 b23.tv 这种短链
-        text = re.sub(r'[a-zA-Z0-9]+\.(tv|com|cn)/[a-zA-Z0-9]+', '', text)
+        # === 去除 URL 链接 ===
+        text = self.url_pattern.sub("", text)
             
         # 去除 @用户 (例如: @绵绵无绝期 )
         # 匹配逻辑：@开头，后面跟非空白字符
@@ -85,7 +112,30 @@ class OpinionPreprocessor:
         
         return text
 
-    def _is_garbage(self, text):
+    def _has_url(self, text: str) -> bool:
+        """判断文本中是否包含 URL / 外链"""
+        if not text:
+            return False
+        return bool(self.url_pattern.search(text))
+
+    def _is_lottery_spam(self, text: str) -> bool:
+        """检测是否为转发抽奖 / 抽签类垃圾文本"""
+        if not text:
+            return False
+
+        # 先做简单关键词命中
+        for kw in self.lottery_keywords:
+            if kw in text:
+                return True
+
+        # 再做模式匹配（转发 + 抽/送、关注 + 转发 等）
+        for pat in self.lottery_patterns:
+            if pat.search(text):
+                return True
+
+        return False
+
+    def _is_garbage(self, text, has_url: bool = False, raw_text: str = None):
         """
         (3) 部分去垃圾逻辑：过短或无意义文本
         """
@@ -98,6 +148,17 @@ class OpinionPreprocessor:
         # 过滤特定垃圾词
         if text in self.garbage_words:
             return True
+
+        # 过滤明显的转发抽奖 / 抽签类内容（优先用原始文本判断）
+        if raw_text and self._is_lottery_spam(raw_text):
+            return True
+        if self._is_lottery_spam(text):
+            return True
+
+        # 过滤包含外部链接的内容（推广 / 引流评论通常都带链接）
+        if has_url:
+            return True
+
         return False
 
     def deduplicate_data(self, data_list):
@@ -142,11 +203,44 @@ class OpinionPreprocessor:
         """
         # HanLP 分词
         tokens = self.tokenizer(text)
-        
+
         # 过滤停用词
         filtered_tokens = [t for t in tokens if t not in self.stop_words and len(t.strip()) > 0]
         
         return filtered_tokens
+
+    def update_domain_stopwords_from_keyword(self, keyword: str):
+        """
+        根据传入关键词动态更新领域停用词。
+        例如：传入 '小米su7' 时，会把 '小米su7'、'小米'、'su7' 等都加入停用词表。
+        """
+        if not keyword:
+            return
+
+        kw = keyword.strip()
+        if not kw:
+            return
+
+        terms = set()
+        # 原始关键词本身
+        terms.add(kw)
+
+        # 使用 HanLP 对关键词分词
+        try:
+            tokens = self.tokenizer(kw)
+        except Exception:
+            tokens = list(kw)
+
+        for t in tokens:
+            t = str(t).strip()
+            if t:
+                terms.add(t)
+
+        # 额外用正则抽取连续中文和字母数字片段，增强对混合串的拆分
+        for seg in re.findall(r"[\u4e00-\u9fff]+", kw):
+            terms.add(seg)
+        for seg in re.findall(r"[a-zA-Z0-9]+", kw):
+            terms.add(seg)
 
     def process(self, raw_data_list):
         """
@@ -159,13 +253,18 @@ class OpinionPreprocessor:
             # 1. 基础格式化
             formatted_item = self._format_data(item)
             if not formatted_item: continue
-            
+
+            raw_text = formatted_item.get('content', '') or ''
+
+            # 提前在原始文本上做 URL 检测，后续用于垃圾过滤
+            has_url = self._has_url(raw_text)
+
             # 2. 文本清洗
-            clean_text = self._clean_text(formatted_item.get('content', ''))
+            clean_text = self._clean_text(raw_text)
             formatted_item['clean_content'] = clean_text
             
             # 3. 垃圾过滤 (初步)
-            if self._is_garbage(clean_text):
+            if self._is_garbage(clean_text, has_url=has_url, raw_text=raw_text):
                 continue
                 
             step1_data.append(formatted_item)
