@@ -72,5 +72,57 @@ class DatabaseManager:
         cursor = self.col_raw.find(query).limit(limit)
         return list(cursor)
 
+    def init_analysis_task(self, keyword):
+        """
+        【异步模式步骤1】初始化一个任务，标记为 'running'
+        """
+        batch_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        document = {
+            "batch_id": batch_id,
+            "keyword": keyword,
+            "status": "running",  # 关键状态：running, success, failed
+            "created_at": datetime.datetime.now(),
+            "topics": [],
+            "error_msg": ""
+        }
+        self.col_topics.insert_one(document)
+        return batch_id
+
+    def update_task_success(self, batch_id, topic_data):
+        """
+        【异步模式步骤2】任务成功，更新状态和结果
+        """
+        self.col_topics.update_one(
+            {"batch_id": batch_id},
+            {"$set": {
+                "status": "success",
+                "topics": topic_data,
+                "finished_at": datetime.datetime.now()
+            }}
+        )
+
+    def update_task_failed(self, batch_id, error_msg):
+        """
+        【异步模式步骤3】任务失败，记录错误
+        """
+        self.col_topics.update_one(
+            {"batch_id": batch_id},
+            {"$set": {
+                "status": "failed",
+                "error_msg": error_msg,
+                "finished_at": datetime.datetime.now()
+            }}
+        )
+
+    def get_task_status(self, keyword):
+        """
+        【异步模式步骤4】根据关键词查询最新任务的状态
+        """
+        # 找该关键词最近的一次任务
+        return self.col_topics.find_one(
+            {"keyword": keyword},
+            sort=[("created_at", -1)]
+        )
+
 # 单例模式：在其他文件直接 from src.database import db 即可
 db = DatabaseManager()

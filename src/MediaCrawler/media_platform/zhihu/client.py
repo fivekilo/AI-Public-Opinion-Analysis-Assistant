@@ -169,6 +169,22 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
 
         """
         cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+
+        # === 新增代码开始：知乎Cookie瘦身 ===
+        # 知乎核心只需要 z_c0 (登录凭证), _xsrf (跨域), d_c0 (设备ID)
+        # 过滤掉其他的几十个垃圾广告Cookie，防止 400 Header Too Large
+        valid_keys = ["z_c0", "_xsrf", "d_c0", "klb_z_com"]
+
+        filtered_cookies = []
+        for cookie in cookies:
+            if cookie["name"] in valid_keys:
+                filtered_cookies.append(cookie)
+
+        if len(filtered_cookies) > 0:
+            utils.logger.info(f"[ZhihuClient] Cookie瘦身: {len(cookies)} -> {len(filtered_cookies)}")
+            cookies = filtered_cookies
+        # === 新增代码结束 ===
+
         self.default_headers["cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 

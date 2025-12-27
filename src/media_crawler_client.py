@@ -69,7 +69,7 @@ async def crawl_once(
     platform: Platform,
     login_type: LoginType,
     keywords: str,
-    CRAWLER_MAX_NOTES_COUNT=60,
+    CRAWLER_MAX_NOTES_COUNT=20,
     CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES=30,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """

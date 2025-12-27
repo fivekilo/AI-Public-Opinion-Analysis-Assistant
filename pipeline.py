@@ -1,4 +1,6 @@
 import os
+# 强制 PyExecJS 使用 Node.js 运行 JS 代码
+os.environ["EXECJS_RUNTIME"] = "Node"
 import json
 import torch
 import asyncio
@@ -22,33 +24,32 @@ async def fetech_data(platform, login_type, keywords):
         )
         contents = result.get("contents", [])
         comments = result.get("comments", [])
-        print(f"平台 {platform} 爬取完成，获取到 {len(contents)} 条内容")
+        print(f"平台 {platform} 爬取完成，获取到 {len(contents)} 条内容，{len(contents)+len(comments)} 条评论")
         return contents, comments
     except Exception as e:
         print(f"平台 {platform} 爬取失败: {e}")
         return [], []  # 发生异常时返回空列表，确保程序不崩溃
 
     
-async def run_analysis_pipeline(keywords: str, platform: str = "tieba", login_type: str = "cookie"):
+async def run_analysis_pipeline(keywords: str, login_type: str = "cookie"):
     """
     【核心流水线】供 MCP Server 调用。
     接收关键词和平台，执行全套分析，返回结果字典。
     """
-    print(f"\n🚀 [Pipeline Start] 启动实时分析: {keywords} @ {platform}")
+    print(f"\n🚀 [Pipeline Start] 启动实时分析: {keywords} ")
 
     # --- 1. 爬取数据 ---
     print(f"🕷️ [Step 1] 正在爬取数据...")
-    keywords = "小米17Ultra"
     login_type = "cookie"
     target_platforms = ['xhs', 'dy', 'ks', 'bili', 'wb', 'tieba', 'zhihu']
     contents=[]
     comments=[]
     for plat in target_platforms:
-        content, comment = asyncio.run(
+        content, comment = await(
             fetech_data(plat, login_type, keywords)
         )
         contents.extend(content)
-        comments.extend(comments)
+        comments.extend(comment)
 
     total_raw_count = len(contents) + len(comments)
     if total_raw_count == 0:
@@ -124,19 +125,16 @@ async def run_analysis_pipeline(keywords: str, platform: str = "tieba", login_ty
     # A. 存原始数据
     db.save_raw_data(all_processed_items)
 
-    # B. 存分析结果 (注意：传入 keyword)
-    # 确保你的 database.py 里的 save_analysis_result 接受 keyword 参数
-    batch_id = db.save_analysis_result(structured_topics, keyword=keywords)
+    # B. 存分析结果 (已经交由database.py异步控制)
+    # batch_id = db.save_analysis_result(structured_topics, keyword=keywords)
 
-    print(f"✅ [Pipeline End] 全流程结束，Batch ID: {batch_id}")
+    print(f"✅ [Pipeline End] 全流程结束")
 
     # --- 6. 构造返回给 MCP/大模型的数据 ---
-    # 大模型不需要看所有几千条评论，只需要看总结好的 topics
     return {
         "status": "success",
-        "batch_id": batch_id,
+        # "batch_id": batch_id,#(已经交由database.py异步控制)
         "keyword": keywords,
-        "platform": platform,
         "total_analyzed": len(all_processed_items),
         "topic_count": len(structured_topics),
         "topics": structured_topics,  # 这里包含了关键词和代表性评论
@@ -145,4 +143,4 @@ async def run_analysis_pipeline(keywords: str, platform: str = "tieba", login_ty
 
 # 这里的 main 仅用于本地测试
 if __name__ == "__main__":
-    asyncio.run(run_analysis_pipeline(keywords="小米17Ultra", platform="tieba"))
+    asyncio.run(run_analysis_pipeline(keywords="台湾地震"))
