@@ -28,25 +28,6 @@ async def fetech_data(platform, login_type, keywords):
         print(f"平台 {platform} 爬取失败: {e}")
         return [], []  # 发生异常时返回空列表，确保程序不崩溃
 
-async def run_all_platforms(platforms, login_type, keywords):
-    # 1. 创建任务列表
-    tasks = []
-    for p in platforms:
-        tasks.append(fetech_data(p, login_type, keywords))
-    
-    # 2. 并发执行所有任务
-    # asyncio.gather 会同时运行所有 fetch_data，并等待它们全部返回
-    all_results = await asyncio.gather(*tasks)
-    
-    # 3. 合并结果
-    total_contents = []
-    total_comments = []
-    
-    for contents, comments in all_results:
-        total_contents.extend(contents) # 使用 extend 拼接列表
-        total_comments.extend(comments)
-        
-    return total_contents, total_comments
     
 async def run_analysis_pipeline(keywords: str, platform: str = "tieba", login_type: str = "cookie"):
     """
@@ -60,9 +41,14 @@ async def run_analysis_pipeline(keywords: str, platform: str = "tieba", login_ty
     keywords = "小米17Ultra"
     login_type = "cookie"
     target_platforms = ['xhs', 'dy', 'ks', 'bili', 'wb', 'tieba', 'zhihu']
-    contents, comments = asyncio.run(
-        run_all_platforms(target_platforms, login_type, keywords)
-    )
+    contents=[]
+    comments=[]
+    for plat in target_platforms:
+        content, comment = asyncio.run(
+            fetech_data(plat, login_type, keywords)
+        )
+        contents.extend(content)
+        comments.extend(comments)
 
     total_raw_count = len(contents) + len(comments)
     if total_raw_count == 0:

@@ -4,7 +4,7 @@ import datetime
 import time
 from simhash import Simhash
 import hanlp
-import config
+from src import config
 import json
 
 class OpinionPreprocessor:
