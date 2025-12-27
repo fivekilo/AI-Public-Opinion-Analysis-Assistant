@@ -9,6 +9,8 @@ from pathlib import Path
 from src.database import db
 
 THIS_DIR=Path(__file__).resolve().parent
+# 设置 HuggingFace 镜像 (放在全局，确保生效)
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 async def fetech_data(platform, login_type, keywords):
     try:
@@ -45,118 +47,116 @@ async def run_all_platforms(platforms, login_type, keywords):
         total_comments.extend(comments)
         
     return total_contents, total_comments
+    
+async def run_analysis_pipeline(keywords: str, platform: str = "tieba", login_type: str = "cookie"):
+    """
+    【核心流水线】供 MCP Server 调用。
+    接收关键词和平台，执行全套分析，返回结果字典。
+    """
+    print(f"\n🚀 [Pipeline Start] 启动实时分析: {keywords} @ {platform}")
 
-def main():
-    # 1. 爬取数据
-    # 请确保 data/raw 目录下有你的 json 文件
-
+    # --- 1. 爬取数据 ---
+    print(f"🕷️ [Step 1] 正在爬取数据...")
     keywords = "小米17Ultra"
     login_type = "cookie"
-    
-    # 定义你想同时爬取的平台列表
     target_platforms = ['xhs', 'dy', 'ks', 'bili', 'wb', 'tieba', 'zhihu']
-    
-    # 使用 asyncio.run 启动主异步函数
     contents, comments = asyncio.run(
         run_all_platforms(target_platforms, login_type, keywords)
     )
-    
-    print(f"数据收集完成，有效数据: {len(contents)+len(comments)} 条")
 
-    # 2. 数据预处理
+    total_raw_count = len(contents) + len(comments)
+    if total_raw_count == 0:
+        return {"error": "爬虫未获取到任何数据，请检查关键词或Cookie是否有效。"}
+
+    print(f"✅ 数据收集完成，有效数据: {total_raw_count} 条")
+
+    # --- 2. 数据预处理 ---
+    print(f"🧹 [Step 2] 数据预处理...")
     preprocessor = OpinionPreprocessor()
-    #根据关键词更新领域停用词
-    preprocessor.update_domain_stopwords_from_keyword(keyword=keywords)
-    # process 返回的是 list of dict
+
+    # 根据关键词更新领域停用词
+    if hasattr(preprocessor, 'update_domain_stopwords_from_keyword'):
+        preprocessor.update_domain_stopwords_from_keyword(keyword=keywords)
+
+    # 处理评论和内容
     processed_comments = preprocessor.process(comments)
     processed_contents = preprocessor.process(contents)
 
+    # 合并用于聚类
+    # 这里主要分析评论，如果贴吧这种内容也很重要的，可以合并
+    all_processed_items = processed_comments + processed_contents
 
-    print(f"预处理完成，剩余有效数据: {len(processed_comments)+len(processed_contents)} 条")
+    print(f"✅ 预处理完成，剩余有效数据: {len(all_processed_items)} 条")
 
-    # 3. 准备 BERTopic 需要的输入格式
-    print("正在构建数据映射...")
+    # --- 3. 构建映射与 Embedding 输入 ---
+    print("🔄 [Step 3] 构建数据映射...")
     docs_for_clustering = []
-
-    # === 新增：构建映射字典 ===
-    # Key: 分词后的字符串 (BERTopic理解的) -> Value: 原始字符串 (人类理解的)
     token_to_raw_mapping = {}
 
-    for item in processed_comments:
-        # 确保 tokens 存在
+    for item in all_processed_items:
         if item.get('tokens'):
-            # 1. 生成分词后的字符串 (给模型训练用)
+            # 生成分词后的字符串 (给模型训练用)
             joined_text = " ".join(item['tokens'])
             docs_for_clustering.append(joined_text)
 
-            # 2. 记录映射关系 (给最后展示用)
-            # item['content'] 是完全原始的文本
-            # 或者是 item['clean_content'] (清洗过表情和@，但没分词)
-            # 建议使用 item['content'] 以展示最原汁原味的内容
+            # 记录映射关系 (给最后展示用)
             token_to_raw_mapping[joined_text] = item.get('content', '')
 
     # 检查数据量
-    if len(docs_for_clustering) < 15:
-        print("数据量太少，无法进行有效聚类 (至少需要 15 条以上)")
-        return
+    if len(docs_for_clustering) < 10:  # 稍微放宽一点限制
+        return {"error": f"有效数据过少 ({len(docs_for_clustering)}条)，无法进行聚类分析。"}
 
-    # 4. 初始化并运行聚类分析
-    print("-" * 30)
-    print("Step 2: 话题聚类与流派挖掘")
-
+    # --- 4. 聚类分析 ---
+    print("🧠 [Step 4] BERTopic 聚类分析...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"运行设备: {device}")
+    print(f"   运行设备: {device}")
 
-    analyzer = TopicAnalyzer(device=device)
+    try:
+        analyzer = TopicAnalyzer(device=device)
+        # 训练模型
+        analyzer.fit_transform(docs_for_clustering)
 
-    # 训练模型 (这里依然传入分词后的数据)
-    topics, probs, topic_info = analyzer.fit_transform(docs_for_clustering)
+        # 保存可视化图表
+        output_dir = THIS_DIR / "data/results"
+        analyzer.save_visualizations(output_dir=str(output_dir))
 
-    # 5. 保存结果与可视化
-    print("-" * 30)
-    print("Step 3: 生成结果与可视化")
+        # 获取结构化数据
+        structured_topics = analyzer.get_topic_details(token_to_raw_map=token_to_raw_mapping)
 
-    analyzer.save_visualizations(output_dir=THIS_DIR/"data/results")
+        # 保存 JSON 文件备份
+        with open(output_dir / "topics_output.json", "w", encoding='utf-8') as f:
+            json.dump(structured_topics, f, ensure_ascii=False, indent=2)
 
-    # 6. 获取结构化数据
-    structured_topics = analyzer.get_topic_details(token_to_raw_map=token_to_raw_mapping)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": f"聚类分析过程出错: {str(e)}"}
 
-    # 打印一下看看效果 (修改了这里)
-    print(f"\n捕获到 {len(structured_topics)} 个有效意见流派:")
-    for t in structured_topics:
-        print(f"Topic {t['topic_id']} ({t['name']}): 热度 {t['count']}")
-        print(f"  -> 关键词: {t['keywords'][:5]}")
+    # --- 5. 数据库存储 ---
+    print("💾 [Step 5] 存入 MongoDB...")
 
-        # === 修改开始：展示 3 条代表性评论 ===
-        print(f"  -> 代表性评论 (Top 3):")
-        # BERTopic 默认通常返回 3 条，我们遍历显示
-        # 使用 enumerate 加序号，并用 replace 去掉换行符让显示更整洁
-        for idx, doc in enumerate(t['representative_docs'][:3]):
-            clean_doc = str(doc).replace('\n', ' ').strip()
-            print(f"     {idx + 1}. {clean_doc[:100]}...")  # 每条限制显示前100个字
-        print("-" * 20)  # 加个分隔线更好看
-        # === 修改结束 ===
+    # A. 存原始数据
+    db.save_raw_data(all_processed_items)
 
-    # 保存 JSON
-    with open(THIS_DIR/"data/results/topics_output.json", "w", encoding='utf-8') as f:
-        json.dump(structured_topics, f, ensure_ascii=False, indent=2)
-    print("\n结果已保存至 data/results/topics_output.json")
+    # B. 存分析结果 (注意：传入 keyword)
+    # 确保你的 database.py 里的 save_analysis_result 接受 keyword 参数
+    batch_id = db.save_analysis_result(structured_topics, keyword=keywords)
 
-    # 7. 结果保存数据库
-    print("\n[Phase 6] 生成结果...")
+    print(f"✅ [Pipeline End] 全流程结束，Batch ID: {batch_id}")
 
-    # A. 存原始数据 (可选：如果你想存清洗后的数据)
-    # processed_data 里面包含了 content, clean_content, tokens 等
-    # 我们可以把它们存进去，作为“数据资产”
-    db.save_raw_data(processed_comments)
-    # B. 存分析结果
-    structured_topics = analyzer.get_topic_details(token_to_raw_map=token_to_raw_mapping)
+    # --- 6. 构造返回给 MCP/大模型的数据 ---
+    # 大模型不需要看所有几千条评论，只需要看总结好的 topics
+    return {
+        "status": "success",
+        "batch_id": batch_id,
+        "keyword": keywords,
+        "platform": platform,
+        "total_analyzed": len(all_processed_items),
+        "topic_count": len(structured_topics),
+        "topics": structured_topics,  # 这里包含了关键词和代表性评论
+        "visualization_path": str(output_dir)
+    }
 
-    # 存入 MongoDB
-    batch_id = db.save_analysis_result(structured_topics)
-
-    print(f"\n✅ 全流程执行完毕！数据已入库，批次ID: {batch_id}")
-
-
+# 这里的 main 仅用于本地测试
 if __name__ == "__main__":
-    main()
+    asyncio.run(run_analysis_pipeline(keywords="小米17Ultra", platform="tieba"))
