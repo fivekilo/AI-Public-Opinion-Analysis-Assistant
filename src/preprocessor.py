@@ -100,7 +100,7 @@ class OpinionPreprocessor:
         # === 去除 URL 链接 ===
         text = self.url_pattern.sub("", text)
             
-        # 去除 @用户 (例如: @绵绵无绝期 )
+        # 去除 @用户
         # 匹配逻辑：@开头，后面跟非空白字符
         text = re.sub(r"@\S+", "", text)
         

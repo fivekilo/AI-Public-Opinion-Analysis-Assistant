@@ -15,7 +15,7 @@ class DatabaseManager:
         self.col_raw = self.db["raw_comments"]
         self.col_topics = self.db["topic_results"]
 
-        # 创建索引以加速查询 (可选，但推荐)
+        # 创建索引
         # 按时间倒序查
         self.col_raw.create_index([("create_time", DESCENDING)])
         # 按批次ID查分析结果
@@ -29,9 +29,6 @@ class DatabaseManager:
             return 0
 
         # 这里的 data_list 就是你 preprocessor 处理完的那些 dict
-        # 使用 insert_many 批量插入，速度快
-        # 注意：MongoDB 自动生成的 _id 有可能重复(极少)，
-        # 严谨做法是用 update_one upsert，但数据量少可以直接 insert
         try:
             result = self.col_raw.insert_many(data_list)
             print(f"[DB] 成功存入 {len(result.inserted_ids)} 条原始数据")
@@ -57,20 +54,6 @@ class DatabaseManager:
         self.col_topics.insert_one(document)
         print(f"[DB] 分析结果已保存，批次号: {batch_id}")
         return batch_id
-
-    def get_latest_analysis(self):
-        """
-        供 MCP 调用：获取最新的一次分析结果
-        """
-        return self.col_topics.find_one(sort=[("created_at", -1)])
-
-    def search_raw_comments(self, keyword, limit=5):
-        """
-        供 MCP 调用：查具体的评论证据
-        """
-        query = {"content": {"$regex": keyword}}
-        cursor = self.col_raw.find(query).limit(limit)
-        return list(cursor)
 
     def init_analysis_task(self, keyword):
         """
@@ -118,11 +101,10 @@ class DatabaseManager:
         """
         【异步模式步骤4】根据关键词查询最新任务的状态
         """
-        # 找该关键词最近的一次任务
         return self.col_topics.find_one(
             {"keyword": keyword},
             sort=[("created_at", -1)]
         )
 
-# 单例模式：在其他文件直接 from src.database import db 即可
+# 单例模式供import
 db = DatabaseManager()

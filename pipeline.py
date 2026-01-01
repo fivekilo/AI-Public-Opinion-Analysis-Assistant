@@ -1,5 +1,4 @@
 import os
-# 强制 PyExecJS 使用 Node.js 运行 JS 代码
 os.environ["EXECJS_RUNTIME"] = "Node"
 import json
 import torch
@@ -11,7 +10,7 @@ from pathlib import Path
 from src.database import db
 
 THIS_DIR=Path(__file__).resolve().parent
-# 设置 HuggingFace 镜像 (放在全局，确保生效)
+# 设置 HuggingFace 镜像加速下载嵌入模型
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 async def fetech_data(platform, login_type, keywords):
@@ -33,8 +32,7 @@ async def fetech_data(platform, login_type, keywords):
     
 async def run_analysis_pipeline(keywords: str, login_type: str = "cookie"):
     """
-    【核心流水线】供 MCP Server 调用。
-    接收关键词和平台，执行全套分析，返回结果字典。
+    【核心流水线】接收关键词和平台，执行全套分析，返回结果字典。
     """
     print(f"\n🚀 [Pipeline Start] 启动实时分析: {keywords} ")
 
@@ -70,7 +68,6 @@ async def run_analysis_pipeline(keywords: str, login_type: str = "cookie"):
     processed_contents = preprocessor.process(contents)
 
     # 合并用于聚类
-    # 这里主要分析评论，如果贴吧这种内容也很重要的，可以合并
     all_processed_items = processed_comments + processed_contents
 
     print(f"✅ 预处理完成，剩余有效数据: {len(all_processed_items)} 条")
@@ -90,7 +87,7 @@ async def run_analysis_pipeline(keywords: str, login_type: str = "cookie"):
             token_to_raw_mapping[joined_text] = item.get('content', '')
 
     # 检查数据量
-    if len(docs_for_clustering) < 10:  # 稍微放宽一点限制
+    if len(docs_for_clustering) < 10:  # 可按需调整
         return {"error": f"有效数据过少 ({len(docs_for_clustering)}条)，无法进行聚类分析。"}
 
     # --- 4. 聚类分析 ---
@@ -141,6 +138,6 @@ async def run_analysis_pipeline(keywords: str, login_type: str = "cookie"):
         "visualization_path": str(output_dir)
     }
 
-# 这里的 main 仅用于本地测试
+# main 用于本地测试
 if __name__ == "__main__":
     asyncio.run(run_analysis_pipeline(keywords="台湾地震"))
